@@ -459,3 +459,22 @@ void FieldDiffusion::PoyntingFlux(EdgeField &e, const AthenaArray<Real> &bc) {
   }
   return;
 }
+
+
+
+// // VB adding function for Hall EMF calculation
+// //----------------------------------------------------------------------------------------
+// //! \fn void FieldDiffusion::HallEMF
+// //! \brief EMF from Hall effect
+
+// void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
+//                               EdgeField &e) {
+//   MeshBlock *pmb = pmy_block;
+//   int is = pmb->is; int js = pmb->js; int ks = pmb->ks;
+//   int ie = pmb->ie; int je = pmb->je; int ke = pmb->ke;
+
+//   AthenaArray<Real> &e1 = e.x1e, &e2 = e.x2e, &e3 = e.x3e,
+//                     &J1 = jedge_.x1e, &J2 = jedge_.x2e, &J3 = jedge_.x3e;
+
+
+// }
