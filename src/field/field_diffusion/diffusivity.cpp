@@ -159,6 +159,169 @@ void FieldDiffusion::CalcCurrent(FaceField &b) {
 }
 
 
+
+// VB: add Hall effect EMF function to update electric field 
+// Compatible with the constrained transport method which updates magnetic field using the curl of electric field
+// Based on Athena++ calculation for the Ohmic diffusion term OhmicEMF
+// Hall effect is 1/ne j x B
+// current density and electric fields are edge-centred, and magnetic fields are face centred to align with the constrained transport method
+//----------------------------------------------------------------------------------------
+//! \fn void FieldDiffusion::HallEMF
+//! \brief EMF due to Hall term
+
+void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
+                                  EdgeField &e) {
+  MeshBlock *pmb = pmy_block;
+  int is = pmb->is; int js = pmb->js; int ks = pmb->ks;
+  int ie = pmb->ie; int je = pmb->je; int ke = pmb->ke;
+
+  AthenaArray<Real> &e1 = e.x1e, &e2 = e.x2e, &e3 = e.x3e,
+                    &J1 = jedge_.x1e, &J2 = jedge_.x2e, &J3 = jedge_.x3e;
+  
+  Real ne; TODO give this a value // number density * electric charge
+
+  // 1D update:
+  if (pmb->block_size.nx2 == 1) {
+    for (int i=is; i<=ie+1; ++i) {
+      Real eta_H = 0.5*(etaB(hall,ks,js,i-1) + etaB(hall,ks,js,i));
+
+      Real intBx = b.x1f(ks,js,i);
+      Real intBy = 0.5*(b.x2f(ks,js,i) + b.x2f(ks,js,i-1));
+      Real intBz = 0.5*(b.x3f(ks,js,i) + b.x3f(ks,js,i-1));
+
+      // hall term of ohm's law: eta_H * (j x B) / ne;
+      // no E1. Bx doesn't depend on it. 
+      // e1(ks  ,js  ,i) += eta_H * (J2(ks,js,i)*intBz - J3(ks,js,i)*intBy) / ne;
+      e2(ks  ,js  ,i) += eta_H * (J1(ks,js,i)*intBz - J3(ks,js,i)*intBx) / ne; // JxBz - JzBx
+      e3(ks  ,js  ,i) += eta_H * (J1(ks,js,i)*intBy - J2(ks,js,i)*intBx) / ne; // JxBy - JyBx
+
+      // transmissive boundaries
+      e2(ke+1,js  ,i)  = e2(ks,js,i);
+      e3(ks  ,je+1,i)  = e3(ks,js,i);
+    }
+    return;
+  }
+
+  // 2D update:
+  if (pmb->block_size.nx3 == 1) {
+    for (int j=js; j<=je+1; ++j) {
+#pragma omp simd
+      for (int i=is; i<=ie+1; ++i) {
+        // emf.x
+        Real eta_H = 0.5*(etaB(hall,ks,j,i) + etaB(hall,ks,j-1,i));
+
+        Real intJx = J1(ks,j,i);
+        Real intJy = 0.25*(J2(ks,j,  i) + J2(ks,j,  i+1)
+                           +J2(ks,j-1,i) + J2(ks,j-1,i+1));
+        Real intJz = 0.5 *(J3(ks,j,  i)   + J3(ks,j,i+1));
+
+        Real intBx = 0.5*(bc(IB1,ks,j,i)+bc(IB1,ks,j-1,i)); T// why not b.x1f?
+        Real intBy = b.x2f(ks,j,i);
+        Real intBz = 0.5*(b.x3f(ks,j,i)+b.x3f(ks,j-1,i));
+
+      // hall term of ohm's law: eta_H * (j x B) / ne;
+        e1(ks  ,j,i) += eta_H * (intJy*intBz - intJz*intBy) / ne; 
+        e1(ke+1,j,i)  = e1(ks,j,i);
+
+        // emf.y
+        eta_H = 0.5*(etaB(hall,ks,j,i) + etaB(hall,ks,j,i-1));
+
+        intJx = 0.25*(J1(ks,j,i  ) + J1(ks,j+1,i  )
+                      +J1(ks,j,i-1) + J1(ks,j+1,i-1));
+        intJy = J2(ks,j,i);
+        intJz = 0.5 *(J3(ks,j,i  ) + J3(ks,j+1,i));
+
+        intBx = b.x1f(ks,j,i);
+        intBy = 0.5*(bc(IB2,ks,j,i)+bc(IB2,ks,j,i-1));
+        intBz = 0.5*(b.x3f(  ks,j,i)+b.x3f(  ks,j,i-1));
+
+        e2(ks  ,j,i) += eta_H * (intJx*intBz - intJz*intBx) / ne;
+        e2(ke+1,j,i)  = e2(ks,j,i);
+
+        // emf.z
+        eta_H = 0.25*(etaB(hall,ks,j  ,i) + etaB(hall,ks,j  ,i-1)
+                      + etaB(hall,ks,j-1,i) + etaB(hall,ks,j-1,i-1));
+
+        intJx = 0.5*(J1(ks,j,i) + J1(ks,j,i-1));
+        intJy = 0.5*(J2(ks,j,i) + J2(ks,j-1,i));
+        intJz = J3(ks,j,i);
+
+        intBx = 0.5*(b.x1f(ks,j,i) + b.x1f(ks,j-1,i));
+        intBy = 0.5*(b.x2f(ks,j,i) + b.x2f(ks,j,i+1));
+        intBz = 0.25*(b.x3f(ks,j  ,i) + b.x3f(ks,j  ,i-1)
+                      +b.x3f(ks,j-1,i) + b.x3f(ks,j-1,i-1));
+
+        e3(ks,  j,i) += eta_H * (intJx*intBy - intJy*intBx) / ne;
+        e3(ke+1,j,i) = e3(ks,j,i);
+      }
+    }
+    return;
+  }
+
+  // 3D update:
+  for (int k=ks; k<=ke+1; ++k) {
+    for (int j=js; j<=je+1; ++j) {
+#pragma omp simd
+      for (int i=is; i<=ie+1; ++i) {
+        // emf.x
+        Real eta_H = 0.25*(etaB(hall,k  ,j,i) + etaB(hall,k  ,j-1,i)
+                           + etaB(hall,k-1,j,i) + etaB(hall,k-1,j-1,i));
+
+        Real intJx = J1(k,j,i);
+        Real intJy = 0.25*(J2(k,j,  i) + J2(k,j,  i+1)
+                           +J2(k,j-1,i) + J2(k,j-1,i+1));
+        Real intJz = 0.25*(J3(k  ,j,i)   + J3(k  ,j,i+1)
+                           +J3(k-1,j,i)   + J3(k-1,j,i+1));
+
+        Real intBx = 0.25*(bc(IB1,k  ,j,i)+bc(IB1,k  ,j-1,i)
+                           +bc(IB1,k-1,j,i)+bc(IB1,k-1,j-1,i));
+        Real intBy = 0.5*(b.x2f(k,j,i) + b.x2f(k-1,j,i));
+        Real intBz = 0.5*(b.x3f(k,j,i) + b.x3f(k,j-1,i));
+
+        e1(k,j,i) +=eta_H * (intJy*intBz - intJz*intBy) / ne;
+
+        // emf.y
+        eta_H = 0.25*(etaB(hall,k  ,j,i) + etaB(hall,k  ,j,i-1)
+                      + etaB(hall,k-1,j,i) + etaB(hall,k-1,j,i-1));
+
+        intJx = 0.25*(J1(k,j,  i) + J1(k,j,  i-1)
+                      +J1(k,j+1,i) + J1(k,j+1,i-1));
+        intJy = J2(k,j,i);
+        intJz = 0.25*(J3(k  ,j,i)   + J3(k  ,j+1,i)
+                      +J3(k-1,j,i)   + J3(k-1,j+1,i));
+
+        intBx = 0.5*(b.x1f(k,j,i) + b.x1f(k-1,j,i));
+        intBy = 0.25*(bc(IB2,k  ,j,i)+bc(IB2,k  ,j,i-1)
+                      +bc(IB2,k-1,j,i)+bc(IB2,k-1,j,i-1));
+        intBz = 0.5*(b.x3f(k,j,i) + b.x3f(k,j,i-1));
+
+        e2(k,j,i) += eta_H * (intJx*intBz - intJz*intBx) / ne;
+
+        // emf.z
+        eta_H = 0.25*(etaB(hall,k,j  ,i) + etaB(hall,k,j  ,i-1)
+                      + etaB(hall,k,j-1,i) + etaB(hall,k,j-1,i-1));
+
+        intJx = 0.25*(J1(k  ,j,i) + J1(k  ,j,i-1)
+                      +J1(k+1,j,i) + J1(k+1,j,i-1));
+        intJy = 0.25*(J2(k  ,j,i) + J2(k  ,j-1,i)
+                      +J2(k+1,j,i) + J2(k+1,j-1,i));
+        intJz = J3(k,j,i);
+
+        intBx = 0.5*(b.x1f(k,j,i) + b.x1f(k,j-1,i));
+        intBy = 0.5*(b.x2f(k,j,i) + b.x2f(k,j,i-1));
+        intBz = 0.25*(bc(IB3,k,j  ,i)+bc(IB3,k,j  ,i-1)
+                      +bc(IB3,k,j-1,i)+bc(IB3,k,j-1,i-1));
+
+
+        e3(k,j,i) += eta_H * (intJx*intBy - intJy*intBx) / ne;
+        
+      }
+    }
+  }
+  return;
+}
+
+
 //----------------------------------------------------------------------------------------
 //! \fn void FieldDiffusion::OhmicEMF
 //! \brief EMF from Ohmic resistivity
@@ -459,3 +622,5 @@ void FieldDiffusion::PoyntingFlux(EdgeField &e, const AthenaArray<Real> &bc) {
   }
   return;
 }
+
+
