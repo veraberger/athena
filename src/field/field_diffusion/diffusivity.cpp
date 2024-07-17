@@ -192,7 +192,7 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
       // hall term of ohm's law: eta_H * (j x B) / ne;
       // no E1. Bx doesn't depend on it. 
       // e1(ks  ,js  ,i) += eta_H * (J2(ks,js,i)*intBz - J3(ks,js,i)*intBy) / ne;
-      e2(ks  ,js  ,i) += eta_H * (J1(ks,js,i)*intBz - J3(ks,js,i)*intBx) / ne; // JxBz - JzBx
+      e2(ks  ,js  ,i) += eta_H * (-J1(ks,js,i)*intBz + J3(ks,js,i)*intBx) / ne; // JxBz - JzBx
       e3(ks  ,js  ,i) += eta_H * (J1(ks,js,i)*intBy - J2(ks,js,i)*intBx) / ne; // JxBy - JyBx
 
       // transmissive boundaries
@@ -235,7 +235,7 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
         intBy = 0.5*(bc(IB2,ks,j,i)+bc(IB2,ks,j,i-1));
         intBz = 0.5*(b.x3f(  ks,j,i)+b.x3f(  ks,j,i-1));
 
-        e2(ks  ,j,i) += eta_H * (intJx*intBz - intJz*intBx) / ne;
+        e2(ks  ,j,i) += eta_H * (-intJx*intBz + intJz*intBx) / ne;
         e2(ke+1,j,i)  = e2(ks,j,i);
 
         // emf.z
@@ -295,7 +295,7 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
                       +bc(IB2,k-1,j,i)+bc(IB2,k-1,j,i-1));
         intBz = 0.5*(b.x3f(k,j,i) + b.x3f(k,j,i-1));
 
-        e2(k,j,i) += eta_H * (intJx*intBz - intJz*intBx) / ne;
+        e2(k,j,i) += eta_H * (-intJx*intBz + intJz*intBx) / ne;
 
         // emf.z
         eta_H = 0.25*(etaB(hall,k,j  ,i) + etaB(hall,k,j  ,i-1)

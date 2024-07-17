@@ -106,6 +106,13 @@ void FieldDiffusion::CalcDiffusionEMF(FaceField &bi, const AthenaArray<Real> &bc
   ClearEMF(e_oa);
   if (eta_ohm != 0.0) OhmicEMF(bi, bc, e_oa);
   if (eta_ad != 0.0) AmbipolarEMF(bi, bc, e_oa);
+  if (eta_hall != 0.0) HallEMF(bi, bc, e_oa); // VB: add call to hall emf func
+  ////  TODO consider 
+  // if (( !STS_ENABLED ) && (eta_hall != 0.0)) {
+  //    HallEMF(bi, bc, e_oa); 
+  //   }
+  // // and then would probably have to define a task to call HallEMF
+
 
   // calculate the Poynting flux pflux and add to energy flux in Hydro class
   if (NON_BAROTROPIC_EOS) PoyntingFlux(e_oa, bc);

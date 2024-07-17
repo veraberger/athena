@@ -72,7 +72,7 @@ class FieldDiffusion {
 
   // non-ideal MHD EMFs
   void OhmicEMF(const FaceField &b, const AthenaArray<Real> &bc, EdgeField &e);
-  //void HallEMF(const FaceField &b, const AthenaArray<Real> &bc, EdgeField &e);
+  void HallEMF(const FaceField &b, const AthenaArray<Real> &bc, EdgeField &e);
   void AmbipolarEMF(const FaceField &b, const AthenaArray<Real> &bc, EdgeField &e);
 
   // functions for energy flux
@@ -81,7 +81,7 @@ class FieldDiffusion {
  private:
   AthenaArray<Real> bmag_; // B field strength
   EdgeField jedge_;       // curl of B
-  //EdgeField eh1_, eh2_, eh3_; // scratch arrays for the Hall integrator
+  EdgeField eh1_, eh2_, eh3_; // scratch arrays for the Hall integrator
 
   FieldDiffusionCoeffFunc CalcMagDiffCoeff_; // calculate magnetic diffusivities
 
