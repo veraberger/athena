@@ -43,6 +43,7 @@ void ConstDiffusivity(FieldDiffusion *pfdif, MeshBlock *pmb, const AthenaArray<R
     for (int k=ks; k<=ke; k++) {
       for (int j=js; j<=je; j++) {
 #pragma omp simd
+// hall contribution is eta_hall * B / rho
         for (int i=is; i<=ie; i++)
           pfdif->etaB(FieldDiffusion::DiffProcess::hall, k,j,i) =
               pfdif->eta_hall*bmag(k,j,i)/w(IDN,k,j,i);
@@ -53,6 +54,7 @@ void ConstDiffusivity(FieldDiffusion *pfdif, MeshBlock *pmb, const AthenaArray<R
     for (int k=ks; k<=ke; k++) {
       for (int j=js; j<=je; j++) {
 #pragma omp simd
+// ambipolar diffusion is eta_ad * B^2
         for (int i=is; i<=ie; i++)
           pfdif->etaB(FieldDiffusion::DiffProcess::ambipolar, k,j,i) =
               pfdif->eta_ad*SQR(bmag(k,j,i));
@@ -178,8 +180,6 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
   AthenaArray<Real> &e1 = e.x1e, &e2 = e.x2e, &e3 = e.x3e,
                     &J1 = jedge_.x1e, &J2 = jedge_.x2e, &J3 = jedge_.x3e;
   
-  Real ne; TODO give this a value // number density * electric charge
-
   // 1D update:
   if (pmb->block_size.nx2 == 1) {
     for (int i=is; i<=ie+1; ++i) {
@@ -208,19 +208,20 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
 #pragma omp simd
       for (int i=is; i<=ie+1; ++i) {
         // emf.x
+        Real intBx, intJx;
         Real eta_H = 0.5*(etaB(hall,ks,j,i) + etaB(hall,ks,j-1,i));
 
-        Real intJx = J1(ks,j,i);
+        // Real intJx = J1(ks,j,i);
         Real intJy = 0.25*(J2(ks,j,  i) + J2(ks,j,  i+1)
                            +J2(ks,j-1,i) + J2(ks,j-1,i+1));
         Real intJz = 0.5 *(J3(ks,j,  i)   + J3(ks,j,i+1));
 
-        Real intBx = 0.5*(bc(IB1,ks,j,i)+bc(IB1,ks,j-1,i)); T// why not b.x1f?
+        // Real intBx = 0.5*(bc(IB1,ks,j,i)+bc(IB1,ks,j-1,i)); // why not b.x1f?
         Real intBy = b.x2f(ks,j,i);
         Real intBz = 0.5*(b.x3f(ks,j,i)+b.x3f(ks,j-1,i));
 
       // hall term of ohm's law: eta_H * (j x B) / ne;
-        e1(ks  ,j,i) += eta_H * (intJy*intBz - intJz*intBy) / ne; 
+        e1(ks  ,j,i) += eta_H * (intJy*intBz - intJz*intBy);// / ne; 
         e1(ke+1,j,i)  = e1(ks,j,i);
 
         // emf.y
@@ -235,7 +236,7 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
         intBy = 0.5*(bc(IB2,ks,j,i)+bc(IB2,ks,j,i-1));
         intBz = 0.5*(b.x3f(  ks,j,i)+b.x3f(  ks,j,i-1));
 
-        e2(ks  ,j,i) += eta_H * (-intJx*intBz + intJz*intBx) / ne;
+        e2(ks  ,j,i) += eta_H * (-intJx*intBz + intJz*intBx);// / ne;
         e2(ke+1,j,i)  = e2(ks,j,i);
 
         // emf.z
@@ -251,7 +252,7 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
         intBz = 0.25*(b.x3f(ks,j  ,i) + b.x3f(ks,j  ,i-1)
                       +b.x3f(ks,j-1,i) + b.x3f(ks,j-1,i-1));
 
-        e3(ks,  j,i) += eta_H * (intJx*intBy - intJy*intBx) / ne;
+        e3(ks,  j,i) += eta_H * (intJx*intBy - intJy*intBx);// / ne;
         e3(ke+1,j,i) = e3(ks,j,i);
       }
     }
@@ -278,7 +279,7 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
         Real intBy = 0.5*(b.x2f(k,j,i) + b.x2f(k-1,j,i));
         Real intBz = 0.5*(b.x3f(k,j,i) + b.x3f(k,j-1,i));
 
-        e1(k,j,i) +=eta_H * (intJy*intBz - intJz*intBy) / ne;
+        e1(k,j,i) +=eta_H * (intJy*intBz - intJz*intBy);// / ne;
 
         // emf.y
         eta_H = 0.25*(etaB(hall,k  ,j,i) + etaB(hall,k  ,j,i-1)
@@ -295,7 +296,7 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
                       +bc(IB2,k-1,j,i)+bc(IB2,k-1,j,i-1));
         intBz = 0.5*(b.x3f(k,j,i) + b.x3f(k,j,i-1));
 
-        e2(k,j,i) += eta_H * (-intJx*intBz + intJz*intBx) / ne;
+        e2(k,j,i) += eta_H * (-intJx*intBz + intJz*intBx);// / ne;
 
         // emf.z
         eta_H = 0.25*(etaB(hall,k,j  ,i) + etaB(hall,k,j  ,i-1)
@@ -313,7 +314,7 @@ void FieldDiffusion::HallEMF(const FaceField &b, const AthenaArray<Real> &bc,
                       +bc(IB3,k,j-1,i)+bc(IB3,k,j-1,i-1));
 
 
-        e3(k,j,i) += eta_H * (intJx*intBy - intJy*intBx) / ne;
+        e3(k,j,i) += eta_H * (intJx*intBy - intJy*intBx);// / ne;
         
       }
     }

@@ -106,7 +106,7 @@ void FieldDiffusion::CalcDiffusionEMF(FaceField &bi, const AthenaArray<Real> &bc
   ClearEMF(e_oa);
   if (eta_ohm != 0.0) OhmicEMF(bi, bc, e_oa);
   if (eta_ad != 0.0) AmbipolarEMF(bi, bc, e_oa);
-  if (eta_hall != 0.0) HallEMF(bi, bc, e_oa); // VB: add call to hall emf func
+  if (eta_hall != 0.0) HallEMF(bi, bc, e_oa); // VB: added call to hall emf func
   ////  TODO consider 
   // if (( !STS_ENABLED ) && (eta_hall != 0.0)) {
   //    HallEMF(bi, bc, e_oa); 
@@ -242,6 +242,7 @@ void FieldDiffusion::AddPoyntingFlux(FaceField &p_src) {
 
 void FieldDiffusion::NewDiffusionDt(Real &dt_oa, Real &dt_h) {
   MeshBlock *pmb = pmy_block;
+  // checks which dimension
   const bool f2 = pmb->pmy_mesh->f2;
   const bool f3 = pmb->pmy_mesh->f3;
 
@@ -269,19 +270,22 @@ void FieldDiffusion::NewDiffusionDt(Real &dt_oa, Real &dt_h) {
 
   AthenaArray<Real> &eta_t = eta_tot_;
   AthenaArray<Real> &len = dx1_, &dx2 = dx2_, &dx3 = dx3_;
-
+  // loop thru system
   for (int k=ks; k<=ke; ++k) {
     for (int j=js; j<=je; ++j) {
 #pragma omp simd
+      // intitalize total eta as 0 at each x 
       for (int i=is; i<=ie; ++i) {
         eta_t(i) = 0.0;
       }
+      // if there's ohmic diffusion, add the contribution at pt k,j,i to the total eta
       if (eta_ohm > 0.0) {
 #pragma omp simd
         for (int i=is; i<=ie; ++i) {
           eta_t(i) += etaB(DiffProcess::ohmic,k,j,i);
         }
       }
+       // if there's ambipolar diffusion, add the contribution at pt k,j,i to the total eta
       if (eta_ad > 0.0) {
 #pragma omp simd
         for (int i=is; i<=ie; ++i) {
@@ -293,6 +297,8 @@ void FieldDiffusion::NewDiffusionDt(Real &dt_oa, Real &dt_h) {
       pmb->pcoord->CenterWidth3(k, j, is, ie, dx3);
 #pragma omp simd
       for (int i=is; i<=ie; ++i) {
+        // cell width is min(dx, dy) the simulation is 2D
+        // if 3D, width is min(dx, dy, dz)
         len(i) = (f2) ? std::min(len(i), dx2(i)):len(i);
         len(i) = (f3) ? std::min(len(i), dx3(i)):len(i);
       }
@@ -301,6 +307,8 @@ void FieldDiffusion::NewDiffusionDt(Real &dt_oa, Real &dt_h) {
           dt_oa = std::min(dt_oa, static_cast<Real>(
               fac_oa*SQR(len(i)) / (eta_t(i) + TINY_NUMBER)));
       }
+      // if Hall enabled, restrict timestep to hall dt determined by whistler wave
+      // sqrt(dx) / |eta_H|
       if (eta_hall > 0.0) {
         for (int i=is; i<=ie; ++i)
           dt_h = std::min(dt_h, static_cast<Real>(
